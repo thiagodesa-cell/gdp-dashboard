@@ -1,14 +1,15 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import requests
 
 # Configuração da página
 st.set_page_config(
-    page_title="StreamFinder - Assistir Filmes",
+    page_title="StreamFinder - Cinema Online",
     page_icon="🍿",
     layout="wide"
 )
 
-# Estilização visual estilo Netflix
+# Estilização visual
 st.markdown("""
     <style>
     .main { background-color: #111; color: #fff; }
@@ -19,53 +20,47 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown("<h1 style='text-align: center; color: #E50914;'>🍿 StreamFinder - Cinema Online</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #aaa;'>Escolha um filme abaixo ou digite o ID do TMDB para assistir diretamente no player, sem chaves ou cadastros!</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #aaa;'>Digite o nome de qualquer filme para buscar e assistir instantaneamente!</p>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Filmes populares pré-configurados com IDs reais do TMDB
-filmes_populares = {
-    "Selecione um filme popular...": "",
-    "Interestelar (2014)": "157336",
-    "Batman: O Cavaleiro das Trevas (2008)": "155",
-    "Vingadores: Ultimato (2019)": "299534",
-    "O Poderoso Chefão (1972)": "238",
-    "Titanic (1997)": "597",
-    "A Origem (2010)": "27205",
-    "Matrix (1999)": "603",
-    "Homem-Aranha: Através do Aranhaverso (2023)": "569094"
-}
+# Barra de pesquisa por nome
+pesquisa = st.text_input("🔍 Digite o nome do filme que deseja assistir:", placeholder="Ex: Avatar, Interestelar, Batman...")
 
-col1, col2 = st.columns([2, 1])
+# Chave pública gratuita do TMDB para buscas básicas
+TMDB_API_KEY = "3c59325f57f12e84d1bc978ae1b03362"
 
-with col1:
-    escolha = st.selectbox("Escolha rápida de Filmes Populares:", list(filmes_populares.keys()))
-    tmdb_selecionado = filmes_populares[escolha]
+if pesquisa:
+    with st.spinner("Buscando filme..."):
+        url = f"https://api.themoviedb.org/3/search/movie?api_key={TMDB_API_KEY}&language=pt-BR&query={pesquisa}"
+        response = requests.get(url)
+        dados = response.json()
+        resultados = dados.get("results", [])
 
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    input_manual = st.text_input("Ou digite o ID do TMDB:", value=tmdb_selecionado if tmdb_selecionado else "")
-
-# Define o ID final
-tmdb_id = input_manual.strip() if input_manual else tmdb_selecionado
-
-st.markdown("---")
-
-if tmdb_id:
-    st.subheader(f"🎬 Reproduzindo (TMDB ID: {tmdb_id})")
-    
-    # Player embutido integrado (VidSrc)
-    embed_url = f"https://vidsrc.xyz/embed/movie?tmdb={tmdb_id}"
-    
-    player_html = f"""
-    <div style="width: 100%; height: 520px; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.8);">
-        <iframe src="{embed_url}" style="width: 100%; height: 100%; border: none;" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>
-    </div>
-    """
-    components.html(player_html, height=550)
-    
-    st.success("Player carregado com sucesso! Divirta-se assistindo.")
+    if resultados:
+        st.success(f"Encontramos {len(resultados)} filme(s)!")
+        
+        # Cria um seletor com os filmes encontrados na busca
+        filmes_opcoes = {f"{f['title']} ({f.get('release_date', 'Data desconhecida')[:4]})": f['id'] for f in resultados}
+        filme_escolhido_nome = st.selectbox("Selecione o filme correto:", list(filmes_opcoes.keys()))
+        tmdb_id = filmes_opcoes[filme_escolhido_nome]
+        
+        st.markdown("---")
+        st.subheader(f"🎬 Reproduzindo: {filme_escolhido_nome}")
+        
+        # Player de streaming integrado
+        embed_url = f"https://vidsrc.xyz/embed/movie?tmdb={tmdb_id}"
+        
+        player_html = f"""
+        <div style="width: 100%; height: 520px; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.8);">
+            <iframe src="{embed_url}" style="width: 100%; height: 100%; border: none;" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>
+        </div>
+        """
+        components.html(player_html, height=550)
+        
+    else:
+        st.warning("Nenhum filme encontrado com esse nome. Tente digitar de outra forma.")
 else:
-    st.info("💡 Selecione um filme na lista acima ou digite o ID do TMDB (por exemplo, `597` para Titanic) para começar a reprodução.")
+    st.info("💡 Dica: Digite o nome de um filme na caixa acima para pesquisar em um catálogo com milhares de opções.")
 
 st.markdown("---")
 st.markdown("<p style='text-align: center; color: #666; font-size: 12px;'>StreamFinder - Entretenimento direto e sem complicações.</p>", unsafe_allow_html=True)
