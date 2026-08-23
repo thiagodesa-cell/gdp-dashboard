@@ -1,24 +1,21 @@
 import requests
 import streamlit as st
 
-# Configuração da página (deve ser o primeiro comando do Streamlit)
+# Configuração da página
 st.set_page_config(
     page_title="StreamFinder - Seus Filmes Favoritos",
     page_icon="🍿",
     layout="wide",
 )
 
-# Inserindo CSS personalizado para dar cara de site/plataforma de streaming (Dark Mode)
+# Estilização em CSS (Dark Mode)
 st.markdown(
     """
     <style>
-    /* Fundo geral e fontes */
     .stApp {
         background-color: #0f1015;
         color: #ffffff;
     }
-    
-    /* Estilo do cabeçalho principal */
     .hero-container {
         padding: 30px 20px;
         background: linear-gradient(180deg, rgba(229, 9, 20, 0.15) 0%, rgba(15, 16, 21, 0) 100%);
@@ -26,8 +23,6 @@ st.markdown(
         text-align: center;
         margin-bottom: 25px;
     }
-    
-    /* Cartão do Filme */
     .movie-card {
         background-color: #181b22;
         border-radius: 10px;
@@ -36,8 +31,6 @@ st.markdown(
         border: 1px solid #2a2e39;
         box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
-    
-    /* Botões de Streaming */
     .streaming-badge {
         display: inline-block;
         background-color: #e50914;
@@ -58,11 +51,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Chave da API e Host
+# Suas credenciais do RapidAPI
 RAPIDAPI_KEY = "2981e7e072msh7c1e16f30f788ap1a37e1jsn4424707c8b9e"
 RAPIDAPI_HOST = "streaming-availability.p.rapidapi.com"
 
-# Seção Visual do Topo (Hero)
+# Cabeçalho Visual
 st.markdown(
     """
     <div class="hero-container">
@@ -73,7 +66,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Barra lateral limpa
+# Barra lateral
 with st.sidebar:
   st.header("⚙️ Preferências")
   country = st.selectbox(
@@ -83,26 +76,29 @@ with st.sidebar:
       help="Altera o catálogo base de disponibilidade.",
   )
   st.markdown("---")
-  st.info("Dica: Digite o nome original ou em português do filme para buscar.")
+  st.info("Dica: Digite o nome do filme em inglês ou português.")
 
-# Campo de Busca Central
+# Caixa de pesquisa centralizada
 col_space1, col_center, col_space2 = st.columns([1, 6, 1])
 with col_center:
   filme_pesquisa = st.text_input(
       "",
-      placeholder="🔍 Digite o nome do filme (ex: Interestelar, Batman, Avatar)...",
+      placeholder="🔍 Digite o nome do filme (ex: The Batman, Interstellar)...",
       label_visibility="collapsed",
   )
 
 if filme_pesquisa:
   with st.spinner("Buscando no catálogo dos streamings..."):
-    url = f"https://{RAPIDAPI_HOST}/shows/search/title"
+    # Atualizado para a versão V4 da API mostrada no seu painel
+    url = f"https://{RAPIDAPI_HOST}/v4/shows/search/title"
+
     querystring = {
-        "query": filme_pesquisa,
+        "title": filme_pesquisa,
+        "country": country,
         "show_type": "movie",
         "output_language": "en",
-        "country": country,
     }
+
     headers = {
         "x-rapidapi-key": RAPIDAPI_KEY,
         "x-rapidapi-host": RAPIDAPI_HOST,
@@ -113,7 +109,12 @@ if filme_pesquisa:
 
       if response.status_code == 200:
         dados = response.json()
-        resultados = dados.get("result", [])
+        # Na V4, o retorno pode vir diretamente como lista ou dentro de uma chave 'result'
+        resultados = (
+            dados
+            if isinstance(dados, list)
+            else dados.get("result", dados.get("shows", []))
+        )
 
         if not resultados:
           st.warning(
@@ -131,20 +132,19 @@ if filme_pesquisa:
             titulo = item.get("title", "Título desconhecido")
             ano = item.get("releaseYear", "")
             sinopse = item.get("overview", "Sem sinopse disponível.")
-            rating = item.get("rating")
+            rating = item.get("rating", item.get("voteAverage"))
 
-            # Imagem
-            image_url = item.get("imageSet", {}).get("verticalPoster", {})
-            if not image_url:
-              image_url = item.get("imageSet", {}).get(
-                  "horizontalBackdrop", {}
-              )
+            # Imagem do pôster
+            image_url = item.get("imageSet", {}).get(
+                "verticalPoster", {}
+            ) or item.get("imageSet", {}).get("horizontalBackdrop", {})
+            if isinstance(image_url, dict):
+              image_url = image_url.get("url", "")
 
             streaming_options = item.get("streamingOptions", {}).get(
                 country, []
             )
 
-            # Container visual simulando um card HTML
             with st.container():
               st.markdown('<div class="movie-card">', unsafe_allow_html=True)
               col_img, col_info = st.columns([1, 3])
@@ -167,16 +167,13 @@ if filme_pesquisa:
                 st.markdown("**📺 Onde assistir:**")
 
                 if streaming_options:
-                  # Criando os botões de streaming lado a lado
                   links_html = ""
                   for opt in streaming_options:
                     servico = opt.get("service", {}).get("name", "Streaming")
                     link = opt.get("link", "#")
                     tipo = opt.get("accessType", "subscription")
-
-                    # Ícone ou texto customizado por tipo (assinatura, aluguel, etc)
                     tipo_txt = (
-                        "Assinatura" if tipo == "subscription" else "Aluguel/Compra"
+                        "Assinatura" if tipo == "subscription" else "Aluguel"
                     )
 
                     links_html += f'<a href="{link}" target="_blank" class="streaming-badge">▶ {servico} ({tipo_txt})</a> '
@@ -192,7 +189,10 @@ if filme_pesquisa:
               st.markdown("</div>", unsafe_allow_html=True)
 
       else:
-        st.error(f"Erro ao consultar a API. Código: {response.status_code}")
+        st.error(
+            f"Erro ao consultar a API. Código: {response.status_code} - Resposta:"
+            f" {response.text}"
+        )
 
     except Exception as e:
       st.error(f"Erro de conexão: {e}")
