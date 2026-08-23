@@ -1,198 +1,71 @@
-import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Configuração da página
 st.set_page_config(
-    page_title="StreamFinder - Seus Filmes Favoritos",
+    page_title="StreamFinder - Assistir Filmes",
     page_icon="🍿",
-    layout="wide",
+    layout="wide"
 )
 
-# Estilização em CSS (Dark Mode)
-st.markdown(
-    """
+# Estilização visual estilo Netflix
+st.markdown("""
     <style>
-    .stApp {
-        background-color: #0f1015;
-        color: #ffffff;
-    }
-    .hero-container {
-        padding: 30px 20px;
-        background: linear-gradient(180deg, rgba(229, 9, 20, 0.15) 0%, rgba(15, 16, 21, 0) 100%);
-        border-radius: 12px;
-        text-align: center;
-        margin-bottom: 25px;
-    }
-    .movie-card {
-        background-color: #181b22;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        border: 1px solid #2a2e39;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    }
-    .streaming-badge {
-        display: inline-block;
-        background-color: #e50914;
-        color: white !important;
-        padding: 6px 14px;
-        border-radius: 4px;
-        text-decoration: none;
-        font-weight: bold;
-        font-size: 14px;
-        margin: 4px 4px 4px 0;
-        transition: background 0.2s;
-    }
-    .streaming-badge:hover {
-        background-color: #f40612;
-    }
+    .main { background-color: #111; color: #fff; }
+    .stTextInput > div > div > input { background-color: #222; color: #fff; border-radius: 5px; }
+    h1, h2, h3 { color: #E50914; font-family: sans-serif; }
+    .stButton>button { background-color: #E50914; color: white; border-radius: 5px; font-weight: bold; border: none; }
     </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-# Suas credenciais do RapidAPI
-RAPIDAPI_KEY = "2981e7e072msh7c1e16f30f788ap1a37e1jsn4424707c8b9e"
-RAPIDAPI_HOST = "streaming-availability.p.rapidapi.com"
+st.markdown("<h1 style='text-align: center; color: #E50914;'>🍿 StreamFinder - Cinema Online</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #aaa;'>Escolha um filme abaixo ou digite o ID do TMDB para assistir diretamente no player, sem chaves ou cadastros!</p>", unsafe_allow_html=True)
+st.markdown("---")
 
-# Cabeçalho Visual
-st.markdown(
-    """
-    <div class="hero-container">
-        <h1>🍿 StreamFinder</h1>
-        <p style="color: #94a3b8; font-size: 18px;">Descubra instantaneamente onde assistir aos seus filmes favoritos nos streamings</p>
+# Filmes populares pré-configurados com IDs reais do TMDB
+filmes_populares = {
+    "Selecione um filme popular...": "",
+    "Interestelar (2014)": "157336",
+    "Batman: O Cavaleiro das Trevas (2008)": "155",
+    "Vingadores: Ultimato (2019)": "299534",
+    "O Poderoso Chefão (1972)": "238",
+    "Titanic (1997)": "597",
+    "A Origem (2010)": "27205",
+    "Matrix (1999)": "603",
+    "Homem-Aranha: Através do Aranhaverso (2023)": "569094"
+}
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    escolha = st.selectbox("Escolha rápida de Filmes Populares:", list(filmes_populares.keys()))
+    tmdb_selecionado = filmes_populares[escolha]
+
+with col2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    input_manual = st.text_input("Ou digite o ID do TMDB:", value=tmdb_selecionado if tmdb_selecionado else "")
+
+# Define o ID final
+tmdb_id = input_manual.strip() if input_manual else tmdb_selecionado
+
+st.markdown("---")
+
+if tmdb_id:
+    st.subheader(f"🎬 Reproduzindo (TMDB ID: {tmdb_id})")
+    
+    # Player embutido integrado (VidSrc)
+    embed_url = f"https://vidsrc.xyz/embed/movie?tmdb={tmdb_id}"
+    
+    player_html = f"""
+    <div style="width: 100%; height: 520px; background: #000; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.8);">
+        <iframe src="{embed_url}" style="width: 100%; height: 100%; border: none;" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>
     </div>
-""",
-    unsafe_allow_html=True,
-)
+    """
+    components.html(player_html, height=550)
+    
+    st.success("Player carregado com sucesso! Divirta-se assistindo.")
+else:
+    st.info("💡 Selecione um filme na lista acima ou digite o ID do TMDB (por exemplo, `597` para Titanic) para começar a reprodução.")
 
-# Barra lateral
-with st.sidebar:
-  st.header("⚙️ Preferências")
-  country = st.selectbox(
-      "Seu País / Região",
-      ["br", "us", "gb", "ca", "ar"],
-      index=0,
-      help="Altera o catálogo base de disponibilidade.",
-  )
-  st.markdown("---")
-  st.info("Dica: Digite o nome do filme em inglês ou português.")
-
-# Caixa de pesquisa centralizada
-col_space1, col_center, col_space2 = st.columns([1, 6, 1])
-with col_center:
-  filme_pesquisa = st.text_input(
-      "",
-      placeholder="🔍 Digite o nome do filme (ex: The Batman, Interstellar)...",
-      label_visibility="collapsed",
-  )
-
-if filme_pesquisa:
-  with st.spinner("Buscando no catálogo dos streamings..."):
-    # Atualizado para a versão V4 da API mostrada no seu painel
-    url = f"https://{RAPIDAPI_HOST}/v4/shows/search/title"
-
-    querystring = {
-        "title": filme_pesquisa,
-        "country": country,
-        "show_type": "movie",
-        "output_language": "en",
-    }
-
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": RAPIDAPI_HOST,
-    }
-
-    try:
-      response = requests.get(url, headers=headers, params=querystring)
-
-      if response.status_code == 200:
-        dados = response.json()
-        # Na V4, o retorno pode vir diretamente como lista ou dentro de uma chave 'result'
-        resultados = (
-            dados
-            if isinstance(dados, list)
-            else dados.get("result", dados.get("shows", []))
-        )
-
-        if not resultados:
-          st.warning(
-              "Nenhum filme encontrado com esse nome para a região"
-              f" selecionada ({country.upper()})."
-          )
-        else:
-          st.markdown(
-              f"<p style='text-align: center; color: #94a3b8;'>Foram encontrados"
-              f" <b>{len(resultados)}</b> títulos.</p>",
-              unsafe_allow_html=True,
-          )
-
-          for item in resultados:
-            titulo = item.get("title", "Título desconhecido")
-            ano = item.get("releaseYear", "")
-            sinopse = item.get("overview", "Sem sinopse disponível.")
-            rating = item.get("rating", item.get("voteAverage"))
-
-            # Imagem do pôster
-            image_url = item.get("imageSet", {}).get(
-                "verticalPoster", {}
-            ) or item.get("imageSet", {}).get("horizontalBackdrop", {})
-            if isinstance(image_url, dict):
-              image_url = image_url.get("url", "")
-
-            streaming_options = item.get("streamingOptions", {}).get(
-                country, []
-            )
-
-            with st.container():
-              st.markdown('<div class="movie-card">', unsafe_allow_html=True)
-              col_img, col_info = st.columns([1, 3])
-
-              with col_img:
-                if image_url:
-                  st.image(image_url, use_container_width=True)
-                else:
-                  st.markdown("*(Sem imagem)*")
-
-              with col_info:
-                st.markdown(f"### {titulo} ({ano})")
-
-                if rating:
-                  st.markdown(f"⭐ **Avaliação:** `{rating}`")
-
-                st.write(sinopse)
-
-                st.markdown("---")
-                st.markdown("**📺 Onde assistir:**")
-
-                if streaming_options:
-                  links_html = ""
-                  for opt in streaming_options:
-                    servico = opt.get("service", {}).get("name", "Streaming")
-                    link = opt.get("link", "#")
-                    tipo = opt.get("accessType", "subscription")
-                    tipo_txt = (
-                        "Assinatura" if tipo == "subscription" else "Aluguel"
-                    )
-
-                    links_html += f'<a href="{link}" target="_blank" class="streaming-badge">▶ {servico} ({tipo_txt})</a> '
-
-                  st.markdown(links_html, unsafe_allow_html=True)
-                else:
-                  st.markdown(
-                      "<span style='color: #f87171;'>Indisponível em"
-                      f" streamings tradicionais em {country.upper()}.</span>",
-                      unsafe_allow_html=True,
-                  )
-
-              st.markdown("</div>", unsafe_allow_html=True)
-
-      else:
-        st.error(
-            f"Erro ao consultar a API. Código: {response.status_code} - Resposta:"
-            f" {response.text}"
-        )
-
-    except Exception as e:
-      st.error(f"Erro de conexão: {e}")
+st.markdown("---")
+st.markdown("<p style='text-align: center; color: #666; font-size: 12px;'>StreamFinder - Entretenimento direto e sem complicações.</p>", unsafe_allow_html=True)
